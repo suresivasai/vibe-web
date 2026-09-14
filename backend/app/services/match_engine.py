@@ -57,14 +57,13 @@ async def find_match(db: AsyncSession, user: User) -> Optional[tuple[Session, Us
     if partner is None:
         return None
 
-    # Remove both from queue
+    # Remove both from queue (atomic with session create via same transaction)
     del_result = await db.execute(
         delete(WaitingQueue).where(
             WaitingQueue.user_id.in_([user.id, partner.id])
         )
     )
     if del_result.rowcount < 1:
-        await db.rollback()
         return None
 
     # Create session
