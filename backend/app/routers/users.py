@@ -56,7 +56,7 @@ async def update_me(
         current_user.gender = body.gender
 
     if body.avatar_url is not None:
-        current_user.avatar_url = body.avatar_url
+        current_user.avatar_url = str(body.avatar_url)
 
     current_user.last_seen = datetime.now(timezone.utc)
     await db.flush()

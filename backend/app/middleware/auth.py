@@ -108,6 +108,10 @@ async def get_current_user(
             detail="User not found",
         )
 
+    now = datetime.now(timezone.utc)
+    if user.is_banned and user.ban_until is not None and user.ban_until <= now:
+        user.is_banned = False
+        user.ban_until = None
     if user.is_banned:
         until = user.ban_until.isoformat() if user.ban_until else None
         raise HTTPException(
@@ -165,7 +169,12 @@ async def authenticate_socket(token: str, db: AsyncSession) -> Optional[User]:
             return None
         result = await db.execute(select(User).where(User.id == parsed_user_id))
         user = result.scalar_one_or_none()
-        if user is None or user.is_banned:
+        if user is None:
+            return None
+        if user.is_banned and user.ban_until is not None and user.ban_until <= datetime.now(timezone.utc):
+            user.is_banned = False
+            user.ban_until = None
+        if user.is_banned:
             return None
         user.last_seen = datetime.now(timezone.utc)
         await db.flush()

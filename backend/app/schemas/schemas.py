@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, HttpUrl
 
 # ---------------------------------------------------------------------------
 # Allowed interest tags (must match master prompt exactly)
@@ -50,7 +50,7 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     display_name: Optional[str] = Field(None, min_length=1, max_length=30)
     gender: Optional[Gender] = None
-    avatar_url: Optional[str] = None
+    avatar_url: Optional[HttpUrl] = None
 
     @field_validator("display_name")
     @classmethod
@@ -100,7 +100,7 @@ class GoogleAuthRequest(BaseModel):
 
 class LocalRegisterRequest(BaseModel):
     email: EmailStr = Field(...)
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=8, max_length=128)
     display_name: str = Field(..., min_length=2, max_length=24)
 
 class LocalLoginRequest(BaseModel):
