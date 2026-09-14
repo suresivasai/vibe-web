@@ -269,18 +269,32 @@ export default function ChatScreen() {
       </div>
 
       {/* Composer */}
-      <div className="border-t border-white/[0.07] bg-[#121416]/95 px-3 py-2.5 safe-bottom">
-        {(showEmoji || showGif) && (
-          <div className="mb-2 max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-[#171a1c] p-2">
-            {showEmoji && <EmojiPicker onSelect={onEmoji} />}
-            {showGif && <GifPicker onSelect={onGif} />}
+      <div className="relative border-t border-white/[0.07] bg-[#121416]/95 px-3 py-2.5 safe-bottom">
+        {showEmoji && (
+          <div className="absolute bottom-full left-0 right-0 z-30 mb-2 px-2">
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#171a1c] shadow-xl">
+              <EmojiPicker
+                onSelect={onEmoji}
+                onClose={() => setShowEmoji(false)}
+              />
+            </div>
+          </div>
+        )}
+        {showGif && (
+          <div className="absolute bottom-full left-0 right-0 z-30 mb-2 px-2">
+            <GifPicker
+              onSelect={(url) => { onGif(url); setShowGif(false) }}
+              onClose={() => setShowGif(false)}
+            />
           </div>
         )}
         <div className="flex items-end gap-2">
           <button
             type="button"
             onClick={() => { setShowEmoji((v) => !v); setShowGif(false) }}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-zinc-400 hover:bg-white/5 hover:text-white"
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
+              showEmoji ? 'bg-primary/20 text-primary-300' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+            }`}
             title="Emoji"
           >
             ☺
@@ -288,7 +302,9 @@ export default function ChatScreen() {
           <button
             type="button"
             onClick={() => { setShowGif((v) => !v); setShowEmoji(false) }}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-zinc-400 hover:bg-white/5 hover:text-white"
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold transition ${
+              showGif ? 'bg-primary/20 text-primary-300' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+            }`}
             title="GIF"
           >
             GIF

@@ -1,6 +1,4 @@
 // frontend/src/components/chat/EmojiPicker.jsx
-// Purpose: emoji-mart panel above input
-// Iteration: 4
 
 import { useEffect, useRef } from 'react'
 import data from '@emoji-mart/data'
@@ -20,14 +18,17 @@ export default function EmojiPicker({ onSelect, onClose }) {
   }, [onClose])
 
   return (
-    <div ref={ref} className="absolute bottom-full left-0 right-0 mb-2 z-20">
+    <div ref={ref} className="w-full">
       <Picker
         data={data}
-        onEmojiSelect={(emoji) => onSelect(emoji.native)}
-        theme="auto"
+        onEmojiSelect={(emoji) => {
+          onSelect(emoji.native || emoji)
+        }}
+        theme="dark"
         previewPosition="none"
         skinTonePosition="none"
         maxFrequentRows={1}
+        dynamicWidth
       />
     </div>
   )
