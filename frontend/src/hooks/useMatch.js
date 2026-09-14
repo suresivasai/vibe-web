@@ -3,7 +3,7 @@
 
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSocket } from './useSocket'
+import { useSocket, requestJoinQueue } from './useSocket'
 import { useChatStore } from '../store/chatStore'
 import { useAuthStore } from '../store/authStore'
 import confetti from 'canvas-confetti'
@@ -17,7 +17,7 @@ export function useMatch() {
   const startMatching = useCallback(() => {
     if (!user) return
     setStatus('waiting')
-    emit('join_queue', {})
+    requestJoinQueue()
     navigate('/waiting')
   }, [emit, user, setStatus, navigate])
 
@@ -35,7 +35,7 @@ export function useMatch() {
       // re-join queue immediately
       setTimeout(() => {
         if (user) {
-          emit('join_queue', {})
+          requestJoinQueue()
         }
       }, 300)
     },

@@ -81,52 +81,40 @@ async function waitForSession(maxAttempts = 8, delayMs = 250) {
 export async function exchangeGoogleSession() {
   const session = await waitForSession()
 
-  const candidates = [
-    session.provider_token,
-    session.id_token,
-    session.access_token,
-  ].filter(Boolean)
-
-  if (candidates.length === 0) {
-    throw new Error('Google session missing tokens. Please try signing in again.')
+  // Use one Google-issued provider token per OAuth exchange. This matters because
+  // Cloudflare Turnstile tokens are single-use; retrying multiple token types with
+  // the same CAPTCHA token would otherwise turn a valid verification into a replay.
+  const token = session.provider_token || session.id_token
+  if (!token) {
+    throw new Error('Google session missing provider token. Please try signing in again.')
   }
 
-  let lastError = null
-  for (const token of candidates) {
-    try {
-      const { data } = await api.post('/auth/google', { id_token: token })
-      return data
-    } catch (err) {
-      lastError = err
-      const status = err.response?.status
-      // 401/403 from backend → try next token type
-      if (status === 401 || status === 403) continue
-      // Other errors (network, 500) → surface immediately
-      throw err
-    }
-  }
+  const captchaToken = sessionStorage.getItem('vibe-captcha-token') || ''
+  const { data } = await api.post('/auth/google', {
+    id_token: token,
+    captcha_token: captchaToken || undefined,
+  })
 
-  const detail = lastError?.response?.data?.detail
-  const message =
-    typeof detail === 'string'
-      ? detail
-      : detail?.reason || lastError?.message || 'Could not verify Google account'
-  throw new Error(message)
+  sessionStorage.removeItem('vibe-captcha-token')
+  sessionStorage.removeItem('vibe-age-confirmed')
+  return data
 }
 
-export async function loginWithEmail(email, password) {
+export async function loginWithEmail(email, password, captchaToken = '') {
   const { data } = await api.post('/auth/login', {
     email: email.trim().toLowerCase(),
     password,
+    captcha_token: captchaToken || undefined,
   })
   return data
 }
 
-export async function registerWithEmail(email, password, displayName) {
+export async function registerWithEmail(email, password, displayName, captchaToken = '') {
   const { data } = await api.post('/auth/register', {
     email: email.trim().toLowerCase(),
     password,
     display_name: displayName.trim(),
+    captcha_token: captchaToken || undefined,
   })
   return data
 }
@@ -138,11 +126,12 @@ export async function refreshToken(refreshTokenValue) {
   return data
 }
 
-export async function logout(refreshTokenValue) {
+export async function logout(refreshTokenValue, accessTokenValue = '') {
   try {
     if (refreshTokenValue) {
       await api.delete('/auth/logout', {
         data: { refresh_token: refreshTokenValue },
+        headers: accessTokenValue ? { Authorization: `Bearer ${accessTokenValue}` } : undefined,
       })
     }
   } catch {

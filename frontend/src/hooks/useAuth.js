@@ -72,23 +72,27 @@ export function useAuth() {
     await loginWithGoogle()
   }, [])
 
-  const signInWithEmail = useCallback(async (email, password) => {
-    const data = await apiLoginWithEmail(email, password)
+  const signInWithEmail = useCallback(async (email, password, captchaToken = '') => {
+    const data = await apiLoginWithEmail(email, password, captchaToken)
     login(data.user, data.access_token, data.refresh_token)
     return data
   }, [login])
 
-  const register = useCallback(async (email, password, displayName) => {
-    const data = await apiRegisterWithEmail(email, password, displayName)
+  const register = useCallback(async (email, password, displayName, captchaToken = '') => {
+    const data = await apiRegisterWithEmail(email, password, displayName, captchaToken)
     login(data.user, data.access_token, data.refresh_token)
     return data
   }, [login])
 
   const signOut = useCallback(async () => {
-    await apiLogout(refreshToken)
+    // Capture tokens before clearing local state so the server can revoke the session
+    // without making the UI wait.
+    const currentAccessToken = useAuthStore.getState().accessToken
+    const currentRefreshToken = useAuthStore.getState().refreshToken
     disconnectSocket()
     storeLogout()
-  }, [refreshToken, storeLogout])
+    void apiLogout(currentRefreshToken, currentAccessToken).catch(() => {})
+  }, [storeLogout])
 
   const completeOnboarding = useCallback(
     async (payload) => {

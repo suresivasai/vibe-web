@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import Logo from '../shared/Logo'
+import TurnstileWidget from './TurnstileWidget'
 
 export default function LoginScreen() {
   const { isAuthenticated, isOnboarded, signInWithGoogle, signInWithEmail, register } = useAuth()
@@ -14,6 +15,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [agreed, setAgreed] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -40,12 +42,20 @@ export default function LoginScreen() {
       setError('Please confirm you are 18 or older.')
       return
     }
+    if (import.meta.env.VITE_TURNSTILE_SITE_KEY && !captchaToken) {
+      setError('Please complete the security verification.')
+      return
+    }
     setLoading(true)
     setError('')
     try {
+      if (captchaToken) sessionStorage.setItem('vibe-captcha-token', captchaToken)
+      sessionStorage.setItem('vibe-age-confirmed', '1')
       await signInWithGoogle()
       // redirect happens — no need to setLoading(false)
     } catch (err) {
+      sessionStorage.removeItem('vibe-captcha-token')
+      sessionStorage.removeItem('vibe-age-confirmed')
       setError(err.message || 'Google sign-in failed. Please try again.')
       setLoading(false)
     }
@@ -65,9 +75,9 @@ export default function LoginScreen() {
     setError('')
     try {
       if (mode === 'login') {
-        await signInWithEmail(email, password)
+        await signInWithEmail(email, password, captchaToken)
       } else {
-        await register(email, password, displayName)
+        await register(email, password, displayName, captchaToken)
       }
     } catch (err) {
       const detail = err.response?.data?.detail
@@ -239,11 +249,13 @@ export default function LoginScreen() {
                   <label className="flex cursor-pointer items-start gap-2.5 pt-1">
                     <input
                       type="checkbox"
+                      name="adult-confirmation"
+                      autoComplete="off"
                       checked={agreed}
                       onChange={(e) => setAgreed(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 accent-primary"
+                      className="peer sr-only"
                     />
-                    <span className="text-xs leading-relaxed text-zinc-400">
+                    <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-white/20 bg-white/5 ring-offset-2 transition peer-focus-visible:ring-2 peer-focus-visible:ring-primary/50 peer-checked:border-primary peer-checked:bg-primary peer-checked:after:block peer-checked:after:mx-auto peer-checked:after:mt-0.5 peer-checked:after:h-2 peer-checked:after:w-1 peer-checked:after:rotate-45 peer-checked:after:border-b-2 peer-checked:after:border-r-2 peer-checked:after:border-white"><span className="sr-only">Age confirmation checkbox</span></span><span className="text-xs leading-relaxed text-zinc-400">
                       I am 18+ and agree to the{' '}
                       <Link to="/privacy" className="text-primary-300 underline-offset-2 hover:underline">
                         Privacy Policy
@@ -279,16 +291,22 @@ export default function LoginScreen() {
               </div>
             )}
 
+            <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+              <TurnstileWidget onToken={setCaptchaToken} onError={setError} />
+            </div>
+
             {/* Age notice when form hidden */}
             {!showForm && (
               <label className="mt-5 flex cursor-pointer items-start gap-2.5">
                 <input
                   type="checkbox"
+                  name="adult-confirmation-hidden"
+                  autoComplete="off"
                   checked={agreed}
                   onChange={(e) => setAgreed(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 accent-primary"
+                  className="peer sr-only"
                 />
-                <span className="text-xs leading-relaxed text-zinc-500">
+                <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-white/20 bg-white/5 ring-offset-2 transition peer-focus-visible:ring-2 peer-focus-visible:ring-primary/50 peer-checked:border-primary peer-checked:bg-primary peer-checked:after:block peer-checked:after:mx-auto peer-checked:after:mt-0.5 peer-checked:after:h-2 peer-checked:after:w-1 peer-checked:after:rotate-45 peer-checked:after:border-b-2 peer-checked:after:border-r-2 peer-checked:after:border-white"><span className="sr-only">Age confirmation checkbox</span></span><span className="text-xs leading-relaxed text-zinc-500">
                   I am 18 or older and agree to the{' '}
                   <Link to="/privacy" className="text-primary-300 hover:underline">
                     Privacy Policy

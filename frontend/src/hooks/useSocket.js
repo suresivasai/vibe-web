@@ -15,6 +15,7 @@ const SOCKET_URL =
 
 let socketInstance = null
 let listenersBound = false
+let lastJoinQueueAt = 0
 
 export function getSocket() {
   return socketInstance
@@ -40,9 +41,7 @@ function bindListeners(socket) {
   socket.on('authenticated', (data) => {
     console.log('[Socket] authenticated', data?.user_id)
     const state = useChatStore.getState()
-    if (state.status === 'waiting') {
-      socket.emit('join_queue', {})
-    }
+    if (state.status === 'waiting') requestJoinQueue()
   })
 
   socket.on('auth_error', (data) => {
@@ -92,9 +91,10 @@ function bindListeners(socket) {
     window.dispatchEvent(new CustomEvent('vibe:friend_request', { detail: data }))
   })
 
-  // Call event forwarding below is the single source for WebRTC; keep the
-  // browser notification here without dispatching a second call event.
+  // Forward incoming calls to the WebRTC hook AND show a browser notification.
+  // Missing this dispatch leaves the callee stuck with no incoming-call UI.
   socket.on('call_incoming', (data) => {
+    window.dispatchEvent(new CustomEvent('vibe:call_incoming', { detail: data }))
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       new Notification(`${data?.from?.display_name || 'Someone'} is calling`, {
         body: `Incoming ${data?.mode || 'voice'} call on Vibe`,
@@ -159,12 +159,28 @@ function ensureSocket(token) {
   return socketInstance
 }
 
+export function requestJoinQueue() {
+  const s = socketInstance
+  if (!s) return false
+  const now = Date.now()
+  // Collapse duplicate calls caused by React effects + socket authentication/reconnects.
+  if (now - lastJoinQueueAt < 1500) return false
+  lastJoinQueueAt = now
+  if (s.connected) {
+    s.emit('join_queue', {})
+    return true
+  }
+  s.once('connect', () => s.emit('join_queue', {}))
+  return true
+}
+
 export function disconnectSocket() {
   if (socketInstance) {
     socketInstance.removeAllListeners()
     socketInstance.disconnect()
     socketInstance = null
     listenersBound = false
+    lastJoinQueueAt = 0
   }
 }
 
