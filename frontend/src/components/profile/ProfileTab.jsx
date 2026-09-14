@@ -1,6 +1,5 @@
 // frontend/src/components/profile/ProfileTab.jsx
-// Purpose: Avatar, name, gender, profile editing, settings, logout
-// Iteration: 6
+// Clean profile + edit name + settings/logout. Production polish.
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -13,69 +12,113 @@ export default function ProfileTab() {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(user?.display_name || '')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const save = async () => {
+    const trimmed = name.trim()
+    if (trimmed.length < 2) {
+      setError('Name needs at least 2 characters')
+      return
+    }
     setSaving(true)
+    setError('')
     try {
-      const updated = await updateMe({
-        display_name: name,
-      })
+      const updated = await updateMe({ display_name: trimmed })
       updateUser(updated)
       setEditing(false)
     } catch (err) {
-      console.error(err)
+      const detail = err.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Could not save')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div className="px-4 pt-6 pb-8 safe-top max-w-md mx-auto">
+    <div className="mx-auto max-w-md px-5 pt-8 pb-10 safe-top animate-fade-up">
       <div className="flex flex-col items-center">
-        <Avatar name={user?.display_name} url={user?.avatar_url} size={88} />
+        <div className="relative">
+          <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl" />
+          <div className="relative overflow-hidden rounded-full ring-2 ring-white/10">
+            <Avatar name={user?.display_name} url={user?.avatar_url} size={88} />
+          </div>
+        </div>
+
         {!editing ? (
           <>
-            <h1 className="mt-3 text-xl font-bold">{user?.display_name}</h1>
-            <span className="mt-1 px-3 py-0.5 rounded-pill bg-primary/10 text-primary text-xs font-medium capitalize">
-              {user?.gender}
+            <h1 className="mt-4 font-display text-xl font-semibold text-white">
+              {user?.display_name}
+            </h1>
+            <span className="mt-1.5 rounded-full bg-primary/10 px-3 py-0.5 text-xs font-medium capitalize text-primary-300">
+              {user?.gender || '—'}
             </span>
           </>
         ) : (
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={30}
-            className="mt-3 w-full text-center text-xl font-bold bg-transparent border-b border-primary focus:outline-none"
-          />
+          <div className="mt-4 w-full">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value.slice(0, 24))}
+              maxLength={24}
+              className="input-clean text-center text-lg font-semibold"
+              autoFocus
+            />
+            {error && (
+              <p className="mt-2 text-center text-sm text-danger" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
         )}
       </div>
 
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold uppercase text-text-secondary-light dark:text-text-secondary-dark">
-            Profile Details
+      <div className="mt-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            Profile
           </h2>
           <button
             type="button"
-            onClick={() => (editing ? save() : setEditing(true))}
-            className="text-sm text-primary font-medium min-h-touch"
+            onClick={() => {
+              if (editing) save()
+              else {
+                setName(user?.display_name || '')
+                setError('')
+                setEditing(true)
+              }
+            }}
+            className="text-sm font-medium text-primary-300 transition hover:text-primary-200"
           >
-            {editing ? (saving ? 'Saving…' : 'Save') : 'Edit Name'}
+            {editing ? (saving ? 'Saving…' : 'Save') : 'Edit name'}
           </button>
         </div>
+        {editing && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(false)
+              setError('')
+            }}
+            className="mb-4 text-sm text-zinc-500 hover:text-zinc-300"
+          >
+            Cancel
+          </button>
+        )}
       </div>
 
-      <div className="mt-8 space-y-2">
+      <div className="mt-2 space-y-2">
         <Link
           to="/settings"
-          className="flex items-center min-h-touch px-4 rounded-card bg-surface-light dark:bg-surface-dark border border-black/8 dark:border-white/8 font-medium"
+          className="flex min-h-[48px] items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 font-medium text-white transition hover:bg-white/[0.05]"
         >
-          Settings
+          <span>Settings</span>
+          <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
         </Link>
         <button
           type="button"
           onClick={signOut}
-          className="w-full min-h-touch px-4 rounded-card text-danger font-medium border border-danger/30"
+          className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-danger/25 bg-danger/5 px-4 font-medium text-danger transition hover:bg-danger/10 active:scale-[0.99]"
         >
           Log out
         </button>

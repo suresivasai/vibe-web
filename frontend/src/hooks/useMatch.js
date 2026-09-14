@@ -56,7 +56,7 @@ export function useMatch() {
       particleCount: 100,
       spread: 70,
       origin: { y: 0.65 },
-      colors: ['#8B5CF6', '#06B6D4', '#F472B6', '#A78BFA', '#22D3EE'],
+      colors: ['#ff705f', '#7ce4c5', '#ff9c8f', '#52c6a7', '#ffa396'],
     })
   }, [])
 

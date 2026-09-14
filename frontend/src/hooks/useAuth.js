@@ -13,6 +13,7 @@ import {
   getMe,
   updateMe,
   deleteMe,
+  clearAuthState,
   supabase,
 } from '../api/auth'
 import { disconnectSocket } from './useSocket'
@@ -31,11 +32,11 @@ export function useAuth() {
   } = useAuthStore()
 
   // Listen for Supabase auth state changes (OAuth redirect)
+  // AuthCallback owns the primary exchange after redirect.
+  // This only recovers a session if user lands elsewhere with a live Supabase session.
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // AuthCallback page owns the exchange after OAuth redirect.
-        // Only auto-exchange if we are NOT on the callback route (e.g. restored session).
         if (
           event === 'SIGNED_IN' &&
           session &&
@@ -47,6 +48,7 @@ export function useAuth() {
             login(data.user, data.access_token, data.refresh_token)
           } catch (err) {
             console.error('Failed to exchange Google session', err)
+            await clearAuthState()
           }
         }
         if (event === 'SIGNED_OUT') {

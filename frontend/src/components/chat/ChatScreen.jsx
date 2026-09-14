@@ -1,6 +1,5 @@
 // frontend/src/components/chat/ChatScreen.jsx
-// Purpose: Stranger chat with text, voice, and video calls
-// Iteration: UI polish
+// Stranger chat — text, voice, video. Production UI polish.
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -17,6 +16,7 @@ import { submitReport } from '../../api/reports'
 import { sendFriendRequest } from '../../api/friends'
 import api from '../../api/axios'
 import { useWebRTC } from '../../hooks/useWebRTC'
+import Avatar from '../shared/Avatar'
 
 const REPORT_REASONS = [
   { value: 'inappropriate_content', label: 'Inappropriate content' },
@@ -26,27 +26,12 @@ const REPORT_REASONS = [
   { value: 'spam', label: 'Spam' },
 ]
 
-function CallButton({ label, icon, onClick, disabled }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="relative min-h-touch min-w-touch flex flex-col items-center justify-center rounded-xl text-text-secondary-light dark:text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/5 transition"
-      title={label}
-      disabled={disabled}
-    >
-      <span className="text-lg leading-none">{icon}</span>
-    </button>
-  )
-}
-
 export default function ChatScreen() {
   const { sessionId } = useParams()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const updateUser = useAuthStore((s) => s.updateUser)
-  const { messages, stranger, isTyping, setSession, clearSession, addMessage } =
-    useChatStore()
+  const { messages, stranger, isTyping, setSession, clearSession, addMessage } = useChatStore()
   const { emit } = useSocket()
   const { skipChat, endChat } = useMatch()
   const [text, setText] = useState('')
@@ -57,6 +42,7 @@ export default function ChatScreen() {
   const [friendSent, setFriendSent] = useState(false)
   const [showChangeName, setShowChangeName] = useState(false)
   const [newName, setNewName] = useState(user?.display_name || '')
+  const [showMenu, setShowMenu] = useState(false)
   const bottomRef = useRef(null)
   const typingTimeout = useRef(null)
   const call = useWebRTC(sessionId, stranger)
@@ -141,7 +127,7 @@ export default function ChatScreen() {
       return
     }
     try {
-      const updated = await api.patch('/users/me', { display_name: name }).then(r => r.data)
+      const updated = await api.patch('/users/me', { display_name: name }).then((r) => r.data)
       updateUser(updated)
       emit('name_changed', { session_id: sessionId, display_name: name })
       setShowChangeName(false)
@@ -150,81 +136,128 @@ export default function ChatScreen() {
     }
   }
 
+  const onEmoji = (emoji) => {
+    setText((t) => t + (emoji.native || emoji))
+  }
+
+  const onGif = (url) => {
+    if (!sessionId || !url) return
+    addMessage({
+      id: `temp-${Date.now()}`,
+      content: url,
+      sender_id: user?.id,
+      sent_at: new Date().toISOString(),
+      is_flagged: false,
+    })
+    emit('send_message', { session_id: sessionId, content: url })
+    setShowGif(false)
+  }
+
   return (
-    <div className="h-dvh flex flex-col bg-bg-light dark:bg-bg-dark">
+    <div className="h-dvh flex flex-col bg-[#0c0e10]">
       {/* Header */}
-      <header className="flex items-center gap-2 px-2 py-2 border-b border-black/[0.06] dark:border-white/[0.08] safe-top bg-surface-light/90 dark:bg-surface-dark/90 backdrop-blur-md">
+      <header className="flex items-center gap-2 border-b border-white/[0.07] bg-[#121416]/95 px-2 py-2 backdrop-blur-md safe-top">
         <button
           type="button"
           onClick={() => endChat(sessionId)}
-          className="min-h-touch min-w-touch flex items-center justify-center rounded-xl text-text-secondary-light dark:text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/5"
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 transition hover:bg-white/5 hover:text-white"
           aria-label="End chat"
-          title="End chat"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
 
-        <div className="flex-1 min-w-0 flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-indigo-500 flex items-center justify-center text-white text-sm font-semibold shrink-0">
-            {(stranger?.display_name || '?')[0].toUpperCase()}
-          </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <Avatar name={stranger?.display_name} url={stranger?.avatar_url} size={36} />
           <div className="min-w-0">
-            <p className="font-semibold truncate text-sm">
+            <p className="truncate text-sm font-semibold text-white">
               {stranger?.display_name || 'Stranger'}
             </p>
-            <p className="text-[11px] text-success flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-success" />
-              Connected
+            <p className="text-[11px] text-zinc-500">
+              {call.status !== 'idle' ? `In ${call.mode || 'call'}…` : 'Connected'}
             </p>
           </div>
         </div>
 
-        <CallButton
-          label="Start voice call"
-          icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M5 4.75A2.75 2.75 0 017.75 2h.5A2.75 2.75 0 0111 4.75v1.5A2.75 2.75 0 018.25 9H8a10 10 0 007 7v-.25A2.75 2.75 0 0117.75 13h1.5A2.75 2.75 0 0122 15.75v.5A2.75 2.75 0 0119.25 19C11.38 19 5 12.62 5 4.75z" /></svg>}
+        <button
+          type="button"
           onClick={() => call.startCall('voice')}
           disabled={call.status !== 'idle'}
-        />
-        <CallButton
-          label="Start video call"
-          icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.55-2.73A1 1 0 0121 8.13v7.74a1 1 0 01-1.45.86L15 14M5 6h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" /></svg>}
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
+          title="Voice call"
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+          </svg>
+        </button>
+        <button
+          type="button"
           onClick={() => call.startCall('video')}
           disabled={call.status !== 'idle'}
-        />
-
-        <button
-          type="button"
-          onClick={() => setShowChangeName(true)}
-          className="min-h-touch px-2 text-xs font-semibold text-primary"
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
+          title="Video call"
         >
-          Edit Name
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.55-2.73A1 1 0 0121 8.13v7.74a1 1 0 01-1.45.86L15 14M5 6h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" />
+          </svg>
         </button>
 
-        <button
-          type="button"
-          onClick={handleAddFriend}
-          disabled={friendSent}
-          className="min-h-touch px-2 text-xs font-semibold text-primary disabled:opacity-50"
-        >
-          {friendSent ? 'Sent' : 'Friend'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowReport(true)}
-          className="min-h-touch px-2 text-xs font-semibold text-danger"
-        >
-          Report
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowMenu((v) => !v)}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 transition hover:bg-white/5 hover:text-white"
+            aria-label="More"
+          >
+            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="5" r="1.5" />
+              <circle cx="12" cy="12" r="1.5" />
+              <circle cx="12" cy="19" r="1.5" />
+            </svg>
+          </button>
+          {showMenu && (
+            <div className="absolute right-0 top-11 z-30 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#171a1c] py-1 shadow-xl animate-fade-in">
+              <button
+                type="button"
+                onClick={() => { setShowChangeName(true); setShowMenu(false) }}
+                className="w-full px-4 py-2.5 text-left text-sm text-zinc-200 hover:bg-white/5"
+              >
+                Edit my name
+              </button>
+              <button
+                type="button"
+                onClick={() => { handleAddFriend(); setShowMenu(false) }}
+                disabled={friendSent}
+                className="w-full px-4 py-2.5 text-left text-sm text-zinc-200 hover:bg-white/5 disabled:opacity-50"
+              >
+                {friendSent ? 'Request sent' : 'Add friend'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowReport(true); setShowMenu(false) }}
+                className="w-full px-4 py-2.5 text-left text-sm text-danger hover:bg-danger/10"
+              >
+                Report & block
+              </button>
+              <button
+                type="button"
+                onClick={() => { skipChat(sessionId); setShowMenu(false) }}
+                className="w-full px-4 py-2.5 text-left text-sm text-zinc-200 hover:bg-white/5"
+              >
+                Skip to next
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      <div className="flex-1 overflow-y-auto px-3 py-4" onClick={() => setShowMenu(false)}>
         {messages.length === 0 && (
-          <div className="text-center py-12 px-6">
-            <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark">
-              You’re connected. Say hi — voice & video calls will live here soon.
+          <div className="px-6 py-16 text-center">
+            <p className="text-sm text-zinc-500">
+              You’re connected. Say hi — keep it kind.
             </p>
           </div>
         )}
@@ -235,100 +268,53 @@ export default function ChatScreen() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Change Name Modal */}
-      {showChangeName && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setShowChangeName(false)}
-        >
-          <div
-            className="w-full max-w-sm card-surface p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-bold mb-4">Change Display Name</h3>
-            <form onSubmit={handleChangeName}>
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                autoFocus
-                className="w-full px-4 py-3 rounded-xl bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 text-text-primary-light dark:text-text-primary-dark outline-none mb-4"
-                placeholder="New name..."
-              />
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowChangeName(false)}
-                  className="px-4 py-2 text-sm font-semibold text-text-secondary-light dark:text-text-secondary-dark"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!newName.trim() || newName.trim() === user?.display_name}
-                  className="px-4 py-2 text-sm font-semibold bg-primary text-white rounded-lg disabled:opacity-50"
-                >
-                  Save
-                </button>
-              </div>
-            </form>
+      {/* Composer */}
+      <div className="border-t border-white/[0.07] bg-[#121416]/95 px-3 py-2.5 safe-bottom">
+        {(showEmoji || showGif) && (
+          <div className="mb-2 max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-[#171a1c] p-2">
+            {showEmoji && <EmojiPicker onSelect={onEmoji} />}
+            {showGif && <GifPicker onSelect={onGif} />}
           </div>
-        </div>
-      )}
-
-      {/* Input */}
-      <div className="relative border-t border-black/[0.06] dark:border-white/[0.08] bg-surface-light dark:bg-surface-dark px-2 py-2 safe-bottom">
-        {showEmoji && (
-          <EmojiPicker
-            onSelect={(e) => setText((t) => t + e)}
-            onClose={() => setShowEmoji(false)}
-          />
         )}
-        {showGif && (
-          <GifPicker
-            onSelect={(url) => {
-              setText(url)
-              setShowGif(false)
-            }}
-            onClose={() => setShowGif(false)}
-          />
-        )}
-        <div className="flex items-end gap-1.5 max-w-3xl mx-auto">
+        <div className="flex items-end gap-2">
           <button
             type="button"
-            onClick={() => setShowEmoji((v) => !v)}
-            className="min-h-touch min-w-touch text-xl rounded-xl hover:bg-black/5 dark:hover:bg-white/5"
-            aria-label="Emoji"
+            onClick={() => { setShowEmoji((v) => !v); setShowGif(false) }}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-zinc-400 hover:bg-white/5 hover:text-white"
+            title="Emoji"
           >
-            😊
+            ☺
           </button>
           <button
             type="button"
-            onClick={() => {
-              setShowGif((value) => !value)
-              setShowEmoji(false)
-            }}
-            className="min-h-touch min-w-touch rounded-xl text-xs font-bold text-primary-300 hover:bg-black/5 dark:hover:bg-white/5"
-            aria-label="GIF"
+            onClick={() => { setShowGif((v) => !v); setShowEmoji(false) }}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-zinc-400 hover:bg-white/5 hover:text-white"
+            title="GIF"
           >
             GIF
           </button>
           <input
-            type="text"
             value={text}
             onChange={(e) => handleTyping(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
             placeholder="Message…"
-            maxLength={500}
-            className="flex-1 min-h-touch px-4 py-2.5 rounded-2xl bg-bg-light dark:bg-bg-dark border border-black/8 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            className="input-clean !rounded-2xl !py-2.5 flex-1"
+            maxLength={2000}
           />
           <button
             type="button"
             onClick={handleSend}
             disabled={!text.trim()}
-            className="min-h-touch min-w-touch rounded-2xl bg-primary text-white font-semibold disabled:opacity-40 shadow-md shadow-primary/20"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-md shadow-primary/25 transition disabled:opacity-40 active:scale-95"
           >
-            ↑
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
+            </svg>
           </button>
         </div>
       </div>
@@ -349,30 +335,66 @@ export default function ChatScreen() {
         onClearError={call.clearError}
       />
 
+      {/* Change name modal */}
+      {showChangeName && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5 backdrop-blur-sm animate-fade-in"
+          onClick={() => setShowChangeName(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#141618] p-6 shadow-2xl animate-fade-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-lg font-semibold text-white">Change display name</h3>
+            <form onSubmit={handleChangeName} className="mt-4 space-y-4">
+              <input
+                className="input-clean"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value.slice(0, 24))}
+                maxLength={24}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowChangeName(false)}
+                  className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm text-zinc-400 hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary flex-1 !py-2.5">
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Report sheet */}
       {showReport && (
         <div
-          className="fixed inset-0 z-50 flex items-end bg-black/40"
+          className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm animate-fade-in"
           onClick={() => setShowReport(false)}
         >
           <div
-            className="w-full bg-surface-light dark:bg-surface-dark rounded-t-2xl p-5 safe-bottom shadow-2xl"
+            className="w-full rounded-t-2xl border-t border-white/10 bg-[#141618] p-5 safe-bottom shadow-2xl animate-fade-up"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-semibold text-lg mb-1">Report & block</h3>
-            <p className="text-xs text-text-secondary-light dark:text-text-secondary-dark mb-4">
-              We’ll end this chat and you won’t be matched again.
+            <h3 className="text-lg font-semibold text-white">Report & block</h3>
+            <p className="mt-1 text-xs text-zinc-500">
+              We’ll end this chat and you won’t be matched with them again.
             </p>
-            <div className="space-y-2">
+            <div className="mt-4 space-y-2">
               {REPORT_REASONS.map((r) => (
                 <button
                   key={r.value}
                   type="button"
                   onClick={() => setReportReason(r.value)}
-                  className={`w-full min-h-touch text-left px-4 rounded-control border transition ${
+                  className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition ${
                     reportReason === r.value
-                      ? 'border-primary bg-primary/10'
-                      : 'border-black/10 dark:border-white/10'
+                      ? 'border-primary bg-primary/15 text-white'
+                      : 'border-white/10 text-zinc-300 hover:bg-white/5'
                   }`}
                 >
                   {r.label}
@@ -383,7 +405,7 @@ export default function ChatScreen() {
               type="button"
               onClick={handleReport}
               disabled={!reportReason}
-              className="mt-4 w-full min-h-touch rounded-control bg-danger text-white font-semibold disabled:opacity-40"
+              className="mt-4 w-full rounded-xl bg-danger py-3.5 text-sm font-semibold text-white disabled:opacity-40"
             >
               Submit report
             </button>

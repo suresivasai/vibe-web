@@ -1,3 +1,6 @@
+// frontend/src/components/auth/LoginScreen.jsx
+// Simple, clean auth UI with smooth animations — mobile + desktop
+
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
@@ -13,16 +16,22 @@ export default function LoginScreen() {
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showForm, setShowForm] = useState(false)
 
   useEffect(() => {
-    const requestedMode = searchParams.get('mode')
-    if (requestedMode === 'signup' || requestedMode === 'login') setMode(requestedMode)
+    const requested = searchParams.get('mode')
+    if (requested === 'signup' || requested === 'login') setMode(requested)
+    if (searchParams.get('error') === 'oauth') {
+      setError('Google sign-in didn’t complete. Please try again.')
+    }
   }, [searchParams])
 
-  if (isAuthenticated) return <Navigate to={isOnboarded ? '/' : '/onboarding'} replace />
+  if (isAuthenticated) {
+    return <Navigate to={isOnboarded ? '/' : '/onboarding'} replace />
+  }
 
-  const changeMode = (nextMode) => {
-    setMode(nextMode)
+  const changeMode = (next) => {
+    setMode(next)
     setError('')
   }
 
@@ -35,35 +44,277 @@ export default function LoginScreen() {
     setError('')
     try {
       await signInWithGoogle()
+      // redirect happens — no need to setLoading(false)
     } catch (err) {
       setError(err.message || 'Google sign-in failed. Please try again.')
       setLoading(false)
     }
   }
 
-  const handleSubmit = async (event) => {
-    event.preventDefault()
+  const handleSubmit = async (e) => {
+    e.preventDefault()
     if (!agreed) {
       setError('Please confirm you are 18 or older.')
+      return
+    }
+    if (mode === 'signup' && displayName.trim().length < 2) {
+      setError('Display name must be at least 2 characters.')
       return
     }
     setLoading(true)
     setError('')
     try {
-      if (mode === 'login') await signInWithEmail(email, password)
-      else await register(email, password, displayName)
+      if (mode === 'login') {
+        await signInWithEmail(email, password)
+      } else {
+        await register(email, password, displayName)
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Authentication failed.')
+      const detail = err.response?.data?.detail
+      const msg =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d) => d.msg || d).join(', ')
+            : err.message || 'Authentication failed.'
+      setError(msg)
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-dvh bg-mesh px-5 py-6 sm:px-8 lg:px-10 safe-top">
-      <header className="mx-auto flex max-w-7xl items-center justify-between"><Link to="/"><Logo size={40} /></Link><Link to="/privacy" className="text-sm text-text-muted-dark hover:text-white">Privacy & safety</Link></header>
-      <main className="mx-auto grid min-h-[calc(100dvh-120px)] max-w-6xl items-center gap-12 py-10 lg:grid-cols-[0.9fr_0.75fr] lg:gap-24">
-        <div className="hidden lg:block"><p className="text-xs font-bold uppercase tracking-[0.2em] text-accent-400">Your next conversation</p><h1 className="mt-5 max-w-xl font-display text-6xl font-semibold leading-[0.95] tracking-[-0.05em] text-white">Leave the feed. Find a <span className="text-gradient">real person.</span></h1><p className="mt-7 max-w-md text-base leading-relaxed text-text-secondary-dark">A calmer place to meet someone new, with safety tools and your agency built into every step.</p><div className="mt-9 grid max-w-sm gap-3"><div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><p className="text-sm font-semibold text-white">One match at a time</p><p className="mt-1 text-xs text-text-muted-dark">No infinite feed. No location tracking.</p></div><div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><p className="text-sm font-semibold text-white">Built to feel safe</p><p className="mt-1 text-xs text-text-muted-dark">Report, block, skip, or end the chat whenever you need.</p></div></div></div>
-        <div className="card-surface p-6 sm:p-8"><div className="mb-8"><p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-300">Welcome to Vibe</p><h2 className="mt-3 font-display text-3xl font-semibold text-white">{mode === 'login' ? 'Good to see you.' : 'Make an entrance.'}</h2><p className="mt-2 text-sm text-text-secondary-dark">{mode === 'login' ? 'Pick up where the conversation left off.' : 'Choose a name and meet someone new.'}</p></div><div className="mb-6 grid grid-cols-2 rounded-xl bg-white/[0.04] p-1"><button type="button" onClick={() => changeMode('login')} className={`rounded-lg py-2.5 text-sm font-semibold transition ${mode === 'login' ? 'bg-white/10 text-white' : 'text-text-muted-dark'}`}>Log in</button><button type="button" onClick={() => changeMode('signup')} className={`rounded-lg py-2.5 text-sm font-semibold transition ${mode === 'signup' ? 'bg-white/10 text-white' : 'text-text-muted-dark'}`}>Register</button></div><form onSubmit={handleSubmit} className="space-y-4">{mode === 'signup' && <label className="block"><span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted-dark">Display name</span><input className="input-field" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required maxLength={24} placeholder="Nova, Alex, Pixel" /></label>}<label className="block"><span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted-dark">Email</span><input className="input-field" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required placeholder="you@example.com" /></label><label className="block"><span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted-dark">Password</span><input className="input-field" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={6} placeholder="At least 6 characters" /></label><label className="flex cursor-pointer items-start gap-3 py-2 text-xs leading-relaxed text-text-secondary-dark"><input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-primary" /> <span>I am 18 or older and agree to the <Link to="/privacy" className="text-primary-300 underline">Privacy Policy</Link> and <Link to="/terms" className="text-primary-300 underline">Terms</Link>.</span></label>{error && <p className="text-sm text-danger" role="alert">{error}</p>}<button type="submit" disabled={loading} className="btn-primary w-full">{loading ? 'Working...' : mode === 'login' ? 'Log in to Vibe' : 'Create my account'} <span aria-hidden="true">→</span></button></form><div className="my-6 flex items-center gap-3 text-xs text-text-muted-dark"><span className="h-px flex-1 bg-white/10" />or<span className="h-px flex-1 bg-white/10" /></div><button type="button" onClick={handleGoogle} disabled={loading} className="btn-secondary w-full"><span className="grid h-5 w-5 place-items-center rounded-full bg-white text-xs font-bold text-[#4285f4]">G</span> Continue with Google</button><p className="mt-6 text-center text-xs text-text-muted-dark">You can change your display name later.</p></div>
+    <div className="min-h-dvh bg-[#0c0e10] flex flex-col safe-top">
+      {/* subtle animated gradient orbs */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-32 -left-32 h-72 w-72 rounded-full bg-primary/20 blur-[100px] animate-float-slow" />
+        <div className="absolute top-1/3 -right-24 h-64 w-64 rounded-full bg-accent/15 blur-[90px] animate-float" />
+      </div>
+
+      <header className="relative z-10 flex items-center justify-between px-5 py-5 sm:px-8">
+        <Link to="/" className="transition-opacity hover:opacity-80">
+          <Logo size={36} />
+        </Link>
+        <Link
+          to="/privacy"
+          className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+        >
+          Privacy
+        </Link>
+      </header>
+
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-5 pb-10">
+        <div className="w-full max-w-[400px] animate-fade-up">
+          {/* Hero text */}
+          <div className="mb-8 text-center">
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              {mode === 'login' ? 'Welcome back' : 'Join Vibe'}
+            </h1>
+            <p className="mt-2 text-sm text-zinc-400">
+              {mode === 'login'
+                ? 'Sign in to continue chatting'
+                : 'Create an account in seconds'}
+            </p>
+          </div>
+
+          {/* Card */}
+          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-sm sm:p-7">
+            {/* Google first (primary path) */}
+            <button
+              type="button"
+              onClick={handleGoogle}
+              disabled={loading}
+              className="group relative flex w-full items-center justify-center gap-3 rounded-xl bg-white py-3.5 text-sm font-semibold text-zinc-900 transition-all duration-200 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                />
+              </svg>
+              {loading ? 'Redirecting…' : 'Continue with Google'}
+            </button>
+
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-white/10" />
+              <span className="text-xs text-zinc-500">or</span>
+              <div className="h-px flex-1 bg-white/10" />
+            </div>
+
+            {/* Toggle email form */}
+            {!showForm ? (
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="w-full rounded-xl border border-white/10 py-3 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/[0.04] active:scale-[0.98]"
+              >
+                Continue with email
+              </button>
+            ) : (
+              <div className="animate-fade-in space-y-4">
+                {/* Mode tabs */}
+                <div className="flex rounded-lg bg-white/[0.04] p-1">
+                  <button
+                    type="button"
+                    onClick={() => changeMode('login')}
+                    className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${
+                      mode === 'login'
+                        ? 'bg-white/10 text-white shadow-sm'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    Log in
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeMode('signup')}
+                    className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${
+                      mode === 'signup'
+                        ? 'bg-white/10 text-white shadow-sm'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    Register
+                  </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-3.5">
+                  {mode === 'signup' && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-zinc-400">
+                        Display name
+                      </label>
+                      <input
+                        className="input-clean"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        required
+                        maxLength={24}
+                        placeholder="Nova, Alex…"
+                        autoComplete="nickname"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-zinc-400">
+                      Email
+                    </label>
+                    <input
+                      className="input-clean"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-zinc-400">
+                      Password
+                    </label>
+                    <input
+                      className="input-clean"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      placeholder="At least 6 characters"
+                      autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    />
+                  </div>
+
+                  <label className="flex cursor-pointer items-start gap-2.5 pt-1">
+                    <input
+                      type="checkbox"
+                      checked={agreed}
+                      onChange={(e) => setAgreed(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 accent-primary"
+                    />
+                    <span className="text-xs leading-relaxed text-zinc-400">
+                      I am 18+ and agree to the{' '}
+                      <Link to="/privacy" className="text-primary-300 underline-offset-2 hover:underline">
+                        Privacy Policy
+                      </Link>{' '}
+                      &{' '}
+                      <Link to="/terms" className="text-primary-300 underline-offset-2 hover:underline">
+                        Terms
+                      </Link>
+                    </span>
+                  </label>
+
+                  {error && (
+                    <p
+                      className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger animate-fade-in"
+                      role="alert"
+                    >
+                      {error}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="btn-primary w-full !py-3.5"
+                  >
+                    {loading
+                      ? 'Please wait…'
+                      : mode === 'login'
+                        ? 'Log in'
+                        : 'Create account'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Age notice when form hidden */}
+            {!showForm && (
+              <label className="mt-5 flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 accent-primary"
+                />
+                <span className="text-xs leading-relaxed text-zinc-500">
+                  I am 18 or older and agree to the{' '}
+                  <Link to="/privacy" className="text-primary-300 hover:underline">
+                    Privacy Policy
+                  </Link>{' '}
+                  &{' '}
+                  <Link to="/terms" className="text-primary-300 hover:underline">
+                    Terms
+                  </Link>
+                </span>
+              </label>
+            )}
+
+            {error && !showForm && (
+              <p
+                className="mt-4 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger animate-fade-in"
+                role="alert"
+              >
+                {error}
+              </p>
+            )}
+          </div>
+
+          <p className="mt-6 text-center text-xs text-zinc-600">
+            You can change your display name later in settings.
+          </p>
+        </div>
       </main>
     </div>
   )

@@ -1,6 +1,5 @@
 // frontend/src/components/friends/FriendsTab.jsx
-// Purpose: Friend list with search, pending from API, empty state
-// Iteration: 5 (fixed: accept uses friend row id from API)
+// Clean friends list + pending requests. Production polish.
 
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
@@ -14,6 +13,7 @@ export default function FriendsTab() {
   const myId = useAuthStore((s) => s.user?.id)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [accepting, setAccepting] = useState(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -49,101 +49,114 @@ export default function FriendsTab() {
   })
 
   const handleAccept = async (friendId) => {
+    setAccepting(friendId)
     try {
       await acceptFriend(friendId)
       const request = pending.find((friend) => friend.id === friendId)
-      window.dispatchEvent(new CustomEvent('vibe:friend_accepted', { detail: { friend: { display_name: request?.other_user?.display_name || 'Your friend' } } }))
+      window.dispatchEvent(
+        new CustomEvent('vibe:friend_accepted', {
+          detail: { friend: { display_name: request?.other_user?.display_name || 'Your friend' } },
+        })
+      )
       await refresh()
     } catch (err) {
       console.error(err)
+    } finally {
+      setAccepting(null)
     }
   }
 
   return (
-    <div className="flex flex-col h-full px-4 pt-4 safe-top">
-      <h1 className="text-xl font-bold mb-3">Friends</h1>
+    <div className="flex h-full flex-col px-5 pt-6 safe-top animate-fade-up">
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-white">Friends</h1>
 
-      <input
-        type="search"
-        placeholder="Search friends…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="w-full min-h-touch px-3 rounded-control border border-black/10 dark:border-white/10 bg-surface-light dark:bg-surface-dark text-sm mb-4"
-      />
+      <div className="relative mt-4">
+        <svg
+          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+        </svg>
+        <input
+          type="search"
+          placeholder="Search friends…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="input-clean !pl-10"
+        />
+      </div>
 
       {pending.length > 0 && (
-        <div className="mb-4 space-y-2">
-          <p className="text-xs font-semibold uppercase text-text-secondary-light dark:text-text-secondary-dark">
-            Requests
+        <div className="mt-6 space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            Requests · {pending.length}
           </p>
           {pending.map((f) => (
             <div
               key={f.id}
-              className="flex items-center gap-3 p-3 rounded-card bg-primary/5 border border-primary/20"
+              className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3"
             >
-              <Avatar
-                name={f.other_user?.display_name}
-                url={f.other_user?.avatar_url}
-                size={40}
-              />
-              <span className="flex-1 font-medium truncate">
+              <Avatar name={f.other_user?.display_name} url={f.other_user?.avatar_url} size={42} />
+              <span className="flex-1 truncate font-medium text-white">
                 {f.other_user?.display_name || 'Someone'}
               </span>
               <button
                 type="button"
                 onClick={() => handleAccept(f.id)}
-                className="min-h-touch px-3 rounded-control bg-primary text-white text-sm font-medium"
+                disabled={accepting === f.id}
+                className="rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-[#151719] transition active:scale-[0.97] disabled:opacity-60"
               >
-                Accept
+                {accepting === f.id ? '…' : 'Accept'}
               </button>
             </div>
           ))}
         </div>
       )}
 
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-14 rounded-card bg-gray-200 dark:bg-gray-700 animate-pulse"
-            />
-          ))}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
-          <p className="text-4xl mb-3">👋</p>
-          <p className="font-medium">No friends yet</p>
-          <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark mt-1">
-            Match with strangers and send friend requests.
-          </p>
-        </div>
-      ) : (
-        <ul className="space-y-1">
-          {filtered.map((f) => (
-            <li key={f.id}>
-              <Link
-                to={`/friends/${f.id}`}
-                className="flex items-center gap-3 p-3 rounded-card hover:bg-black/5 dark:hover:bg-white/5 min-h-touch"
-              >
-                <Avatar
-                  name={f.other_user?.display_name}
-                  url={f.other_user?.avatar_url}
-                  size={44}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">
-                    {f.other_user?.display_name || 'Friend'}
-                  </p>
-                  <p className="text-xs text-text-secondary-light dark:text-text-secondary-dark truncate">
-                    Friends
-                  </p>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="mt-6 flex-1">
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-14 animate-pulse rounded-xl bg-white/5" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 text-2xl">
+              👋
+            </div>
+            <p className="font-medium text-white">No friends yet</p>
+            <p className="mt-1.5 max-w-[240px] text-sm text-zinc-500">
+              Match with strangers and send friend requests when the vibe is right.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-1">
+            {filtered.map((f) => (
+              <li key={f.id}>
+                <Link
+                  to={`/friends/${f.id}`}
+                  className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-white/[0.04] active:scale-[0.99]"
+                >
+                  <Avatar name={f.other_user?.display_name} url={f.other_user?.avatar_url} size={46} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-white">
+                      {f.other_user?.display_name || 'Friend'}
+                    </p>
+                    <p className="text-xs text-zinc-500">Friends</p>
+                  </div>
+                  <svg className="h-4 w-4 shrink-0 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }

@@ -166,3 +166,29 @@
 .particle {
   animation: particle-float 4s ease-in-out infinite;
 }
+
+/* --- Simple UI additions (v1.1) --- */
+.input-clean {
+  @apply w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10
+    text-white placeholder:text-white/30 text-sm
+    focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20
+    transition-all duration-200;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.35s ease-out forwards;
+}
+
+.animate-fade-up {
+  animation: fade-up 0.45s ease-out forwards;
+}
