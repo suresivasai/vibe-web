@@ -97,15 +97,18 @@ class UserPublic(BaseModel):
 # ---------------------------------------------------------------------------
 class GoogleAuthRequest(BaseModel):
     id_token: str = Field(..., description="Google ID token from client")
+    captcha_token: Optional[str] = Field(None, max_length=2048)
 
 class LocalRegisterRequest(BaseModel):
     email: EmailStr = Field(...)
     password: str = Field(..., min_length=8, max_length=128)
     display_name: str = Field(..., min_length=2, max_length=24)
+    captcha_token: Optional[str] = Field(None, max_length=2048)
 
 class LocalLoginRequest(BaseModel):
     email: EmailStr = Field(...)
     password: str = Field(...)
+    captcha_token: Optional[str] = Field(None, max_length=2048)
 
 
 class TokenResponse(BaseModel):

@@ -18,6 +18,7 @@ from app.schemas.schemas import (
     TokenResponse,
 )
 from app.services import auth_service
+from app.services.captcha import verify_turnstile
 
 router = APIRouter()
 
@@ -30,6 +31,7 @@ async def google_login(
     db: AsyncSession = Depends(get_db),
 ):
     """Exchange Google ID / access token for Vibe JWTs. Creates profile on first login."""
+    await verify_turnstile(request, body.captcha_token)
     return await auth_service.login_with_google(db, body.id_token)
 
 
@@ -40,6 +42,7 @@ async def local_register(
     body: LocalRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    await verify_turnstile(request, body.captcha_token)
     return await auth_service.register_local(
         db, body.email, body.password, body.display_name
     )
@@ -52,6 +55,7 @@ async def local_login(
     body: LocalLoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    await verify_turnstile(request, body.captcha_token)
     return await auth_service.login_local(db, body.email, body.password)
 
 
