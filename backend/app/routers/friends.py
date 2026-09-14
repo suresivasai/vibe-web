@@ -243,6 +243,7 @@ async def get_friend_chat(
 @router.post("/chats/{friend_id}/messages", response_model=FriendMessageOut)
 @limiter.limit(RATE_LIMITS["send_message"])
 async def send_friend_message(
+    request: Request,
     friend_id: UUID,
     body: dict,
     current_user: User = Depends(get_current_user),
