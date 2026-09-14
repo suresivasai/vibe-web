@@ -1,114 +1,104 @@
 # backend/app/services/moderation.py
-# Purpose: multilingual sexual/profanity masking + report-based auto-ban
+# Purpose: focused sexual-content masking + report-based auto-ban
 
 from datetime import datetime, timedelta, timezone
 import re
 import unicodedata
 from uuid import UUID
 
-from better_profanity import profanity
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Report, User
 
-profanity.load_censor_words()
-
-# A practical local safety layer. This is intentionally configurable rather than
-# claiming to cover every language on Earth. Unicode normalization + punctuation
-# folding also catches common obfuscation such as "s.e.x" / "s-e-x".
-MULTILINGUAL_SEXUAL_TERMS = {
+# Focus only on clearly sexual/explicit content. Do not use a broad profanity
+# dictionary here: broad dictionaries can flag ordinary chat, names, or URLs.
+SEXUAL_TERMS = {
     # English
     "sex", "sexual", "sexy", "porn", "porno", "pornography", "nude", "nudes",
-    # Hindi / Hinglish (Devanagari + common Latin transliterations)
-    "सेक्स", "अश्लील", "पोर्न", "नंगा", "नंगी", "नग्न", "sex kar", "ch***", "bc",
-    # Telugu
+    "fuck", "fucking", "motherfucker", "dick", "pussy", "cock", "cum", "cunt",
+    "blowjob", "handjob", "horny", "masturbat",
+    # Hindi / Indian-language terms
+    "सेक्स", "अश्लील", "पोर्न", "नंगा", "नंगी", "नग्न",
     "సెక్స్", "అశ్లీల", "పోర్న్", "నగ్న", "బూతు",
-    # Tamil
     "செக்ஸ்", "ஆபாச", "போர்ன்", "நிர்வாண",
-    # Kannada
     "ಸೆಕ್ಸ್", "ಅಶ್ಲೀಲ", "ಪೋರ್ನ್", "ನಗ್ನ",
-    # Malayalam
     "സെക്സ്", "അശ്ലീല", "പോൺ", "നഗ്ന",
-    # Bengali
     "সেক্স", "অশ্লীল", "পর্ন", "নগ্ন",
-    # Marathi
     "सेक्स", "अश्लील", "पोर्न", "नग्न",
-    # Gujarati
     "સેક્સ", "અશ્લીલ", "પોર્ન", "નગ્ન",
-    # Punjabi / Gurmukhi
     "ਸੈਕਸ", "ਅਸ਼ਲੀਲ", "ਪੋਰਨ", "ਨੰਗਾ", "ਨੰਗੀ",
-    # Urdu
     "سیکس", "فحش", "پورن", "برہنہ",
-    # Arabic
     "جنس", "جنسي", "إباحي", "اباحي", "عاري", "عري",
-    # Spanish / Portuguese / French / Italian
-    "sexo", "sexual", "porno", "pornografía", "desnudo", "desnuda",
-    "sexo", "pornografia", "nu", "nua", "nue", "nudité", "pornographie",
-    "sesso", "porno", "nudo", "nuda",
-    # German / Dutch
-    "sex", "porno", "pornografie", "nackt", "naakt",
-    # Russian / Turkish
-    "секс", "порно", "порнография", "голый", "голая",
-    "seks", "porno", "çıplak", "ciplak",
+    # European-language basics
+    "sexo", "pornografía", "desnudo", "desnuda", "pornografia",
+    "sesso", "nudo", "nuda", "pornographie", "nackt", "naakt",
+    "секс", "порно", "порнография", "голый", "голая", "seks", "porno", "çıplak", "ciplak",
 }
 
-# Keep the explicit dictionary modest; better_profanity remains a second layer.
-# These patterns target common sexual/slur obfuscation without trying to block all
-# ordinary words containing short substrings.
+# Terms whose normalized representation is safe to match after punctuation/leet
+# folding. Avoid very short/ambiguous terms that can occur inside normal words.
 COMPACT_TERMS = {
-    "fuck", "fucking", "motherfucker", "bitch", "dick", "pussy", "cock",
-    "cum", "cunt", "asshole", "blowjob", "handjob", "horny", "masturbat",
+    "sex", "sexual", "sexy", "porn", "porno", "pornography", "nude", "nudes",
+    "fuck", "fucking", "motherfucker", "dick", "pussy", "cock", "cum", "cunt",
+    "blowjob", "handjob", "horny", "masturbat",
 }
 
 
 def _normalize_for_match(text: str) -> str:
     text = unicodedata.normalize("NFKC", text).casefold()
-    # Leet-ish substitutions; deliberately conservative.
     text = text.translate(str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"}))
-    # Remove separators commonly used to evade filters while preserving scripts.
-    text = re.sub(r"[\W_]+", "", text, flags=re.UNICODE)
-    return text
+    return re.sub(r"[\W_]+", "", text, flags=re.UNICODE)
 
 
 def _term_is_present(content: str, term: str) -> bool:
+    # For Latin terms, use a normalized-word test to avoid matching normal text
+    # merely because a short sequence appears inside a larger unrelated word.
     folded_content = _normalize_for_match(content)
     folded_term = _normalize_for_match(term)
     return bool(folded_term) and folded_term in folded_content
 
 
-def _masked_copy(content: str, terms: list[str]) -> str:
+def _mask_direct_occurrences(content: str, terms: list[str]) -> str:
     result = content
-    # Apply longer terms first so short terms do not partially mask a longer one.
     for term in sorted(terms, key=len, reverse=True):
         if not term.strip():
             continue
-        escaped = re.escape(term)
-        result = re.sub(escaped, lambda m: "*" * max(3, len(m.group(0))), result, flags=re.IGNORECASE)
+        result = re.sub(re.escape(term), lambda m: "*" * max(3, len(m.group(0))), result, flags=re.IGNORECASE)
     return result
 
 
 def filter_message(content: str) -> tuple[str, bool]:
-    """Mask detected profanity/sexual language while preserving the rest of the message."""
+    """Mask only detected sexual/explicit language; preserve ordinary content."""
     if not content:
         return "", False
 
-    flagged = profanity.contains_profanity(content)
-    matched_terms: list[str] = []
-    for term in MULTILINGUAL_SEXUAL_TERMS | COMPACT_TERMS:
-        if _term_is_present(content, term):
-            matched_terms.append(term)
-            flagged = True
-
-    if not flagged:
+    # A plain URL should be preserved verbatim; opaque media URLs are not words.
+    stripped = content.strip()
+    if re.fullmatch(r"https?://\S+", stripped, flags=re.IGNORECASE):
         return content, False
 
-    # Mask direct spellings first. For obfuscated forms, fall back to masking the
-    # whole token/word rather than exposing the original sexual content.
-    masked = _masked_copy(content, matched_terms)
-    if masked == content:
-        masked = re.sub(r"\S+", lambda m: "*" * min(max(len(m.group(0)), 3), 20), content)
-    return masked, True
+    matched_terms = [term for term in SEXUAL_TERMS | COMPACT_TERMS if _term_is_present(content, term)]
+    if not matched_terms:
+        return content, False
+
+    masked = _mask_direct_occurrences(content, matched_terms)
+    if masked != content:
+        return masked, True
+
+    # Obfuscation path: mask only the token containing the normalized term
+    # (e.g. "s.e.x" -> "*****"), leaving surrounding text untouched.
+    normalized_terms = {_normalize_for_match(term) for term in matched_terms if _normalize_for_match(term)}
+    parts = re.split(r"(\s+)", content)
+    changed = False
+    for i, part in enumerate(parts):
+        if not part or part.isspace():
+            continue
+        folded = _normalize_for_match(part)
+        if folded and any(term in folded for term in normalized_terms):
+            parts[i] = "*" * max(3, min(len(part), 20))
+            changed = True
+    return ("".join(parts), True) if changed else (content, False)
 
 
 async def check_and_ban(db: AsyncSession, reported_user_id: UUID) -> dict:

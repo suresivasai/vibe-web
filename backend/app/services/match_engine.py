@@ -7,6 +7,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Block, Session, User, WaitingQueue
@@ -81,15 +82,25 @@ async def find_match(db: AsyncSession, user: User) -> Optional[tuple[Session, Us
 
 
 async def add_to_queue(db: AsyncSession, user: User) -> WaitingQueue:
-    """Add or update user in the waiting queue. Gender/interests ignored for matching."""
-    await db.execute(delete(WaitingQueue).where(WaitingQueue.user_id == user.id))
-    entry = WaitingQueue(
-        user_id=user.id,
-        gender=user.gender or "other",
+    """Idempotently add/update a user in the waiting queue.
+
+    PostgreSQL ON CONFLICT makes concurrent/repeated join_queue events safe.
+    Rejoining updates the existing row instead of racing on the unique user_id key.
+    """
+    stmt = (
+        insert(WaitingQueue)
+        .values(user_id=user.id, gender=user.gender or "other")
+        .on_conflict_do_update(
+            index_elements=[WaitingQueue.user_id],
+            set_={"gender": user.gender or "other"},
+        )
+        .returning(WaitingQueue.id)
     )
-    db.add(entry)
-    await db.flush()
-    await db.refresh(entry)
+    result = await db.execute(stmt)
+    entry_id = result.scalar_one()
+    entry = await db.get(WaitingQueue, entry_id)
+    if entry is None:
+        raise RuntimeError("Failed to load waiting queue entry after upsert")
     return entry
 
 
