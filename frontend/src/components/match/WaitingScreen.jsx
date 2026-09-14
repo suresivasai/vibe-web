@@ -46,7 +46,7 @@ export default function WaitingScreen() {
       setPhase('found')
       celebrateMatch()
       const id = e.detail?.session_id
-      if (id) setTimeout(() => navigate(`/chat/${id}`, { replace: true }), 1200)
+      if (id) setTimeout(() => navigate(`/chat/${id}`, { replace: true }), 250)
     }
     window.addEventListener('vibe:matched', onMatched)
     return () => window.removeEventListener('vibe:matched', onMatched)
@@ -56,7 +56,7 @@ export default function WaitingScreen() {
     if (sessionId) {
       setPhase('found')
       celebrateMatch()
-      const t = setTimeout(() => navigate(`/chat/${sessionId}`, { replace: true }), 1200)
+      const t = setTimeout(() => navigate(`/chat/${sessionId}`, { replace: true }), 250)
       return () => clearTimeout(t)
     }
   }, [sessionId, navigate, celebrateMatch])

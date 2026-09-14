@@ -39,6 +39,10 @@ function bindListeners(socket) {
 
   socket.on('authenticated', (data) => {
     console.log('[Socket] authenticated', data?.user_id)
+    const state = useChatStore.getState()
+    if (state.status === 'waiting') {
+      socket.emit('join_queue', {})
+    }
   })
 
   socket.on('auth_error', (data) => {
@@ -62,6 +66,14 @@ function bindListeners(socket) {
     })
   })
 
+  socket.on('new_friend_message', (msg) => {
+    window.dispatchEvent(new CustomEvent('vibe:new_friend_message', { detail: msg }))
+  })
+
+  socket.on('friend_chat_cleared', (data) => {
+    window.dispatchEvent(new CustomEvent('vibe:friend_chat_cleared', { detail: data }))
+  })
+
   socket.on('stranger_typing', (data) => {
     chat().setTyping(!(data && data.stopped))
   })
@@ -80,6 +92,8 @@ function bindListeners(socket) {
     window.dispatchEvent(new CustomEvent('vibe:friend_request', { detail: data }))
   })
 
+  // Call event forwarding below is the single source for WebRTC; keep the
+  // browser notification here without dispatching a second call event.
   socket.on('call_incoming', (data) => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       new Notification(`${data?.from?.display_name || 'Someone'} is calling`, {
@@ -99,7 +113,7 @@ function bindListeners(socket) {
   })
 
   const callEvents = [
-    'call_incoming',
+
     'call_accepted',
     'call_declined',
     'call_offer',

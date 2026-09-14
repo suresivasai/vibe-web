@@ -17,6 +17,7 @@ import { sendFriendRequest } from '../../api/friends'
 import api from '../../api/axios'
 import { useWebRTC } from '../../hooks/useWebRTC'
 import Avatar from '../shared/Avatar'
+import { maskUnsafeText } from '../../utils/contentFilter'
 
 const REPORT_REASONS = [
   { value: 'inappropriate_content', label: 'Inappropriate content' },
@@ -59,10 +60,8 @@ export default function ChatScreen() {
   useEffect(() => {
     const onLeft = () => {
       endCall(false)
-      window.setTimeout(() => {
-        clearSession()
-        navigate('/waiting', { replace: true })
-      }, 1400)
+      clearSession()
+      navigate('/waiting', { replace: true })
     }
     window.addEventListener('vibe:stranger_left', onLeft)
     return () => window.removeEventListener('vibe:stranger_left', onLeft)
@@ -73,7 +72,7 @@ export default function ChatScreen() {
     if (!content || !sessionId) return
     addMessage({
       id: `temp-${Date.now()}`,
-      content,
+      content: maskUnsafeText(content),
       sender_id: user?.id,
       sent_at: new Date().toISOString(),
       is_flagged: false,

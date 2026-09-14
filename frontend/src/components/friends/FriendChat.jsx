@@ -3,12 +3,14 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getFriendChat, sendFriendMessage, listFriends, clearFriendChat } from '../../api/friends'
+import { getFriendChat, listFriends, clearFriendChat } from '../../api/friends'
 import { useAuthStore } from '../../store/authStore'
 import MessageBubble from '../chat/MessageBubble'
 import Avatar from '../shared/Avatar'
 import { useWebRTC } from '../../hooks/useWebRTC'
+import { useSocket } from '../../hooks/useSocket'
 import CallOverlay from '../chat/CallOverlay'
+import { maskUnsafeText } from '../../utils/contentFilter'
 
 export default function FriendChat() {
   const { friendId } = useParams()
@@ -23,6 +25,7 @@ export default function FriendChat() {
   const [showMenu, setShowMenu] = useState(false)
   const bottomRef = useRef(null)
   const call = useWebRTC(null, { display_name: friendName }, friendId)
+  const { emit } = useSocket()
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,7 @@ export default function FriendChat() {
           getFriendChat(friendId),
           listFriends(),
         ])
-        setMessages(chat.messages || [])
+        setMessages((chat.messages || []).map((m) => ({ ...m, content: maskUnsafeText(m.content) })))
         const f = friends.find((x) => String(x.id) === String(friendId))
         if (f?.other_user) {
           setFriendName(f.other_user.display_name)
@@ -50,16 +53,41 @@ export default function FriendChat() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSend = async () => {
+  useEffect(() => {
+    const onMessage = (event) => {
+      const msg = event.detail
+      if (String(msg?.friend_id) !== String(friendId)) return
+      setMessages((prev) => {
+        if (prev.some((m) => String(m.id) === String(msg.message_id))) return prev
+        return [...prev, {
+          id: msg.message_id,
+          friend_id: msg.friend_id,
+          content: maskUnsafeText(msg.content),
+          sender_id: msg.sender_id,
+          sent_at: msg.sent_at,
+          is_flagged: msg.is_flagged,
+        }]
+      })
+    }
+    window.addEventListener('vibe:new_friend_message', onMessage)
+    return () => window.removeEventListener('vibe:new_friend_message', onMessage)
+  }, [friendId])
+
+  useEffect(() => {
+    const onCleared = (event) => {
+      if (String(event.detail?.friend_id) === String(friendId)) {
+        setMessages([])
+      }
+    }
+    window.addEventListener('vibe:friend_chat_cleared', onCleared)
+    return () => window.removeEventListener('vibe:friend_chat_cleared', onCleared)
+  }, [friendId])
+
+  const handleSend = () => {
     const content = text.trim()
     if (!content) return
-    try {
-      const msg = await sendFriendMessage(friendId, content)
-      setMessages((prev) => [...prev, msg])
-      setText('')
-    } catch (err) {
-      console.error(err)
-    }
+    emit('send_friend_message', { friend_id: friendId, content })
+    setText('')
   }
 
   const handleClear = async () => {

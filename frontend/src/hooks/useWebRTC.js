@@ -118,6 +118,7 @@ export function useWebRTC(sessionId, stranger, friendId = null) {
   const localStreamRef = useRef(null)
   const callRef = useRef(null)
   const pendingCandidatesRef = useRef([])
+  const outgoingTimerRef = useRef(null)
   const statusRef = useRef(status)
   const incomingCallRef = useRef(incomingCall)
   statusRef.current = status
@@ -135,6 +136,10 @@ export function useWebRTC(sessionId, stranger, friendId = null) {
       const call = callRef.current
       if (notify && call?.callId) {
         emit('call_end', { ...scope, call_id: call.callId })
+      }
+      if (outgoingTimerRef.current) {
+        clearTimeout(outgoingTimerRef.current)
+        outgoingTimerRef.current = null
       }
       try {
         peerRef.current?.close()
@@ -226,11 +231,23 @@ export function useWebRTC(sessionId, stranger, friendId = null) {
         setLocalStream(stream)
         setMode(requestedMode)
         setStatus('outgoing')
+        const socket = getSocket()
+        if (!socket?.connected) {
+          setError('Connection is not ready. Please try the call again.')
+          closeCall(false)
+          return
+        }
         emit('call_invite', {
           ...scope,
           call_id: call.callId,
           mode: requestedMode,
         })
+        outgoingTimerRef.current = setTimeout(() => {
+          if (callRef.current?.callId === call.callId && statusRef.current === 'outgoing') {
+            setError('No answer. Please try again.')
+            closeCall(false)
+          }
+        }, 30000)
       } catch (err) {
         setError(
           err.name === 'NotAllowedError'
@@ -258,6 +275,8 @@ export function useWebRTC(sessionId, stranger, friendId = null) {
       setMode(incoming.mode)
       setIncomingCall(null)
       setStatus('connecting')
+      const socket = getSocket()
+      if (!socket?.connected) throw new Error('socket_not_ready')
       await createPeer(call)
       emit('call_accept', { ...scope, call_id: call.callId })
     } catch {
@@ -306,6 +325,10 @@ export function useWebRTC(sessionId, stranger, friendId = null) {
       const call = callRef.current
       if (!call?.caller || !call.callId) return
       if (String(data?.call_id || data?.callId) !== String(call.callId)) return
+      if (outgoingTimerRef.current) {
+        clearTimeout(outgoingTimerRef.current)
+        outgoingTimerRef.current = null
+      }
       try {
         const peer = await createPeer(call)
         const offer = await peer.createOffer()
